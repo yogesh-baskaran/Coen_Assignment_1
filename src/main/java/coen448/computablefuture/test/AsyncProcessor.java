@@ -74,5 +74,5 @@ public class AsyncProcessor {
                 .map(CompletableFuture::join)
                 .collect(Collectors.joining(" ")));
     }
-    
+
 }

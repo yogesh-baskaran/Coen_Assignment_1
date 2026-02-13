@@ -123,6 +123,69 @@ public class AsyncProcessorTest {
                 .collect(java.util.stream.Collectors.joining(" ")));
     }
 
+    // test-only fail-partial helper: returns only successful results, no exception escapes
+    private static CompletableFuture<List<String>> processAsyncFailPartial(
+            List<Microservice> services,
+            List<String> messages) {
+
+        if (services == null) {
+            CompletableFuture<List<String>> f = new CompletableFuture<>();
+            f.completeExceptionally(new IllegalArgumentException("services must not be null"));
+            return f;
+        }
+
+        if (services.isEmpty()) {
+            return CompletableFuture.completedFuture(List.of());
+        }
+
+        if (messages != null && messages.size() != services.size()) {
+            CompletableFuture<List<String>> f = new CompletableFuture<>();
+            f.completeExceptionally(new IllegalArgumentException("messages must be null or have the same size as services"));
+            return f;
+        }
+
+        List<CompletableFuture<String>> futures = new java.util.ArrayList<>();
+        for (int i = 0; i < services.size(); i++) {
+            String msg = (messages == null) ? null : messages.get(i);
+            futures.add(services.get(i).retrieveAsync(msg)
+                .handle((value, ex) -> ex == null ? value : null));
+        }
+
+        return CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
+            .thenApply(v -> futures.stream()
+                .map(CompletableFuture::join)
+                .filter(x -> x != null)
+                .collect(java.util.stream.Collectors.toList()));
+    }
+
+    @Test
+    public void testProcessAsyncFailPartial_returnsOnlySuccesses() throws Exception {
+        Microservice good1 = new Microservice("OK1");
+        Microservice good2 = new Microservice("OK2");
+        Microservice bad = new FailingMicroservice("BAD", new RuntimeException("boom"));
+
+        CompletableFuture<List<String>> result =
+            processAsyncFailPartial(List.of(good1, bad, good2), List.of("a", "b", "c"));
+
+        List<String> out = result.get(1, TimeUnit.SECONDS);
+        assertEquals(2, out.size());
+        assertTrue(out.stream().anyMatch(x -> x.startsWith("OK1:")));
+        assertTrue(out.stream().anyMatch(x -> x.startsWith("OK2:")));
+    }
+
+    @Test
+    public void testProcessAsyncFailPartial_allFail_returnsEmpty() throws Exception {
+        Microservice bad1 = new FailingMicroservice("B1", new RuntimeException("boom1"));
+        Microservice bad2 = new FailingMicroservice("B2", new RuntimeException("boom2"));
+
+        CompletableFuture<List<String>> result =
+            processAsyncFailPartial(List.of(bad1, bad2), List.of("x", "y"));
+
+        List<String> out = result.get(1, TimeUnit.SECONDS);
+        assertTrue(out.isEmpty());
+    }
+
+//
     @Test
     public void testProcessAsyncFailFast_successfulAll() throws Exception {
         Microservice a = new Microservice("A");
