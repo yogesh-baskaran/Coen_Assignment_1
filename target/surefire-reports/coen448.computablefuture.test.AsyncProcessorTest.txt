@@ -1,0 +1,4 @@
+-------------------------------------------------------------------------------
+Test set: coen448.computablefuture.test.AsyncProcessorTest
+-------------------------------------------------------------------------------
+Tests run: 30, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 1.003 s - in coen448.computablefuture.test.AsyncProcessorTest
