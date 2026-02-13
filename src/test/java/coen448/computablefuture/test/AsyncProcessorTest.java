@@ -89,9 +89,9 @@ public class AsyncProcessorTest {
         assertTrue(order.stream().anyMatch(x -> x.startsWith("C:")));
     }
 
-    // --- New test-only helpers and tests for fail-fast behavior. ---
+    // tests for fail-fast behavior. ---
 
-    // test-only fail-fast helper that mirrors the signature you requested.
+
     private static CompletableFuture<String> processAsyncFailFast(
             List<Microservice> services,
             List<String> messages) {
@@ -124,7 +124,7 @@ public class AsyncProcessorTest {
                 .collect(java.util.stream.Collectors.joining(" ")));
     }
 
-    // test-only fail-partial helper: returns only successful results, no exception escapes
+    // test-only fail-partial returns only successful results, no exception escapes
     private static CompletableFuture<List<String>> processAsyncFailPartial(
             List<Microservice> services,
             List<String> messages) {
@@ -159,7 +159,7 @@ public class AsyncProcessorTest {
                 .collect(java.util.stream.Collectors.toList()));
     }
 
-    // test-only fail-soft helper: uses fallback on failures, always completes normally
+    // test-only fail-soft : uses fallback on failures, always completes normally
     private static CompletableFuture<List<String>> processAsyncFailSoft(
             List<Microservice> services,
             List<String> messages,
@@ -209,6 +209,7 @@ public class AsyncProcessorTest {
         assertEquals(2, out.size());
         assertTrue(out.stream().anyMatch(x -> x.startsWith("OK1:")));
         assertTrue(out.stream().anyMatch(x -> x.startsWith("OK2:")));
+        System.out.println("fail-partial:" + out);
     }
 
     @Test
@@ -260,6 +261,7 @@ public class AsyncProcessorTest {
         List<String> out = assertDoesNotThrow(() -> result.get(1, TimeUnit.SECONDS));
         assertFalse(result.isCompletedExceptionally());
         assertEquals(List.of("FALLBACK", "FALLBACK"), out);
+        System.out.println("fail-soft:" + out);
     }
 
 //
@@ -271,6 +273,7 @@ public class AsyncProcessorTest {
         CompletableFuture<String> result = processAsyncFailFast(List.of(a, b), List.of("x", "y"));
         String out = result.get(1, TimeUnit.SECONDS);
         assertTrue(out.contains("A:") && out.contains("B:"));
+        System.out.println("fail-fast:" + out);
     }
 
     @Test
@@ -289,7 +292,7 @@ public class AsyncProcessorTest {
         assertNull(observed.get());
     }
 
-    // Helper microservice that immediately returns a failed future
+    // microservice that immediately returns a failed future
     private static class FailingMicroservice extends Microservice {
         private final RuntimeException ex;
         protected FailingMicroservice(String id, RuntimeException ex) {
@@ -304,7 +307,7 @@ public class AsyncProcessorTest {
         }
     }
 
-    // Helper microservice that completes after a fixed delay
+    // microservice that completes after a fixed delay
     private static class SlowMicroservice extends Microservice {
         private final String id;
         private final int delayMs;
