@@ -14,30 +14,30 @@ import org.junit.jupiter.api.RepeatedTest;
 public class AsyncProcessorTest {
 	@RepeatedTest(5)
     public void testProcessAsyncSuccess() throws ExecutionException, InterruptedException {
-        
+
 		Microservice mockService1 = mock(Microservice.class);
         Microservice mockService2 = mock(Microservice.class);
-        
+
         when(mockService1.retrieveAsync(any())).thenReturn(CompletableFuture.completedFuture("Hello"));
         when(mockService2.retrieveAsync(any())).thenReturn(CompletableFuture.completedFuture("World"));
 
         AsyncProcessor processor = new AsyncProcessor();
         CompletableFuture<String> resultFuture = processor.processAsync(List.of(mockService1, mockService2), null);
-        
+
         String result = resultFuture.get();
         assertEquals("Hello World", result);
-        
+
 //        CompletableFuture<List<String>> resultFuture =
-//        	    processor.processAsyncWithCompletionOrder(
-//        	        List.of(mockService1, mockService2));
+//         	    processor.processAsyncWithCompletionOrder(
+//         	        List.of(mockService1, mockService2));
 
 //        	List<String> order = resultFuture.get();
 //        	System.out.println(order);
 
-        
+
     }
-	
-	
+
+
 	@ParameterizedTest
     @CsvSource({
         "hi, Hello:HI World:HI",
@@ -62,8 +62,8 @@ public class AsyncProcessorTest {
         assertEquals(expectedResult, result);
         
     }
-	
-	
+
+
 	@RepeatedTest(20)
     void showNondeterminism_completionOrderVaries() throws Exception {
 
@@ -87,5 +87,76 @@ public class AsyncProcessorTest {
         assertTrue(order.stream().anyMatch(x -> x.startsWith("B:")));
         assertTrue(order.stream().anyMatch(x -> x.startsWith("C:")));
     }
+
+    // --- New test-only helpers and tests for fail-fast behavior. ---
+
+    // test-only fail-fast helper that mirrors the signature you requested.
+    private static CompletableFuture<String> processAsyncFailFast(
+            List<Microservice> services,
+            List<String> messages) {
+
+        if (services == null) {
+            CompletableFuture<String> f = new CompletableFuture<>();
+            f.completeExceptionally(new IllegalArgumentException("services must not be null"));
+            return f;
+        }
+
+        if (services.isEmpty()) {
+            return CompletableFuture.completedFuture("");
+        }
+
+        if (messages != null && messages.size() != services.size()) {
+            CompletableFuture<String> f = new CompletableFuture<>();
+            f.completeExceptionally(new IllegalArgumentException("messages must be null or have the same size as services"));
+            return f;
+        }
+
+        List<CompletableFuture<String>> futures = new java.util.ArrayList<>();
+        for (int i = 0; i < services.size(); i++) {
+            String msg = (messages == null) ? null : messages.get(i);
+            futures.add(services.get(i).retrieveAsync(msg));
+        }
+
+        return CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
+            .thenApply(v -> futures.stream()
+                .map(CompletableFuture::join)
+                .collect(java.util.stream.Collectors.joining(" ")));
+    }
+
+    @Test
+    public void testProcessAsyncFailFast_successfulAll() throws Exception {
+        Microservice a = new Microservice("A");
+        Microservice b = new Microservice("B");
+
+        CompletableFuture<String> result = processAsyncFailFast(List.of(a, b), List.of("x", "y"));
+        String out = result.get(1, TimeUnit.SECONDS);
+        assertTrue(out.contains("A:") && out.contains("B:"));
+    }
+
+    @Test
+    public void testProcessAsyncFailFast_failsFastOnError() throws Exception {
+        Microservice good = new Microservice("OK");
+        Microservice bad = new FailingMicroservice("BAD", new RuntimeException("boom"));
+
+        CompletableFuture<String> result = processAsyncFailFast(List.of(good, bad), List.of("m1", "m2"));
+
+        ExecutionException ex = assertThrows(ExecutionException.class, () -> result.get(1, TimeUnit.SECONDS));
+        assertNotNull(ex.getCause());
+        assertEquals("boom", ex.getCause().getMessage());
+    }
+
+    // Helper microservice that immediately returns a failed future
+    private static class FailingMicroservice extends Microservice {
+        private final RuntimeException ex;
+        protected FailingMicroservice(String id, RuntimeException ex) {
+            super(id);
+            this.ex = ex;
+        }
+        @Override
+        public CompletableFuture<String> retrieveAsync(String input) {
+            CompletableFuture<String> f = new CompletableFuture<>();
+            f.completeExceptionally(ex);
+            return f;
+        }
+    }
 }
-	
